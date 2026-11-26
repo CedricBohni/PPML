@@ -63,7 +63,7 @@ function renderSamples() {
     btn.append(c);
     btn.addEventListener("click", () => {
       selectSample(i);
-      run(s.pixels, s.label);
+      run(s.pixels, s.label, true);
     });
     box.append(btn);
   });
@@ -107,12 +107,16 @@ function setupPad() {
   const stop = () => (drawing = false);
   pad.addEventListener("pointerup", stop);
   pad.addEventListener("pointercancel", stop);
+  pad.addEventListener("pointerdown", () => ($("pad-hint").hidden = true));
   $("pad-clear").addEventListener("click", clear);
   $("pad-use").addEventListener("click", () => {
     const pixels = padToMnist(pad);
-    if (!pixels) return;
+    if (!pixels) {
+      $("pad-hint").hidden = false;
+      return;
+    }
     selectSample(-1);
-    run(pixels, null);
+    run(pixels, null, true);
   });
 }
 
@@ -318,9 +322,46 @@ function renderPrediction() {
     .join("");
 }
 
+/** Restart a CSS animation class on an element (removing and re-adding alone does not replay it). */
+function replay(el, cls) {
+  el.classList.remove(cls);
+  void el.offsetWidth; // force reflow
+  el.classList.add(cls);
+}
+
+/** Result summary directly under the inputs, plus a highlight on every step that changed. */
+function renderQuick(animate) {
+  const { pixels, label, res, enc } = state;
+  const box = $("quick");
+  let verdict = "";
+  if (label !== null) {
+    verdict = label === res.prediction
+      ? `<span class="ok">✓ correct (true label ${label})</span>`
+      : `<span class="no">✗ wrong (true label ${label})</span>`;
+  }
+  box.innerHTML = `
+    <canvas width="28" height="28" aria-label="Encrypted input"></canvas>
+    <span class="qdigit">${res.prediction}</span>
+    <span class="qtext">
+      <strong>Predicted from encrypted patches</strong>
+      <span class="muted">100 patches encrypted, ${res.conv1.C * 100} inner products decrypted in
+        ${fmt(enc.ms + res.decryptMs, 0)} ms ${verdict ? "· " + verdict : ""}</span>
+    </span>
+    <a href="#step-encrypt" id="quick-go">See how it was computed ↓</a>`;
+  gray(box.querySelector("canvas"), 28, 28, pixels);
+  $("quick-go").addEventListener("click", (e) => {
+    e.preventDefault();
+    $("step-encrypt").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  if (animate) {
+    replay(box, "pop");
+    for (const id of ["step-encrypt", "step-decrypt", "step-predict"]) replay($(id), "updated");
+  }
+}
+
 // ---------- pipeline ----------
 
-function run(pixels, label) {
+function run(pixels, label, animate = false) {
   const enc = clientEncrypt(model, setup.ipfe, pixels);
   const res = serverInfer(model, setup.ipfe, setup.ys, setup.keys, enc.ciphertexts, enc.out);
   const plain = plaintextInfer(model, pixels);
@@ -331,6 +372,7 @@ function run(pixels, label) {
   renderEncryption();
   renderMaps();
   renderPrediction();
+  renderQuick(animate);
 }
 
 async function main() {
@@ -340,7 +382,11 @@ async function main() {
   renderKeys();
   setupPad();
   setupHover();
-  $("reencrypt").addEventListener("click", () => state && run(state.pixels, state.label));
+  $("reencrypt").addEventListener("click", () => {
+    if (!state) return;
+    run(state.pixels, state.label);
+    replay($("step-encrypt"), "updated");
+  });
   dark.addEventListener("change", () => {
     renderKeys();
     if (state) renderMaps();

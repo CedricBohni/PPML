@@ -132,6 +132,39 @@ figcaption { font-size: 0.85rem; color: var(--muted); margin-top: 6px; }
 .bar.top .fill { background: var(--server); }
 .bar .val { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
 
+.hint { color: var(--bad); font-size: 0.88rem; margin: 8px 0 0; }
+
+/* Immediate result under the inputs, so clicking visibly does something. */
+.quick {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  margin-top: 18px; padding: 12px 16px; border-radius: 12px;
+  border: 1px solid var(--line); background: var(--bg);
+}
+.quick canvas { width: 56px; height: 56px; image-rendering: pixelated; border-radius: 6px; background: #000; }
+.quick .qdigit { font-size: 2.4rem; font-weight: 700; line-height: 1; color: var(--server); min-width: 1.2ch; }
+.quick .qtext { display: grid; gap: 2px; }
+.quick .qtext strong { font-size: 1rem; }
+.quick .ok { color: var(--good); }
+.quick .no { color: var(--bad); }
+.quick a { margin-left: auto; font-weight: 600; text-decoration: none; white-space: nowrap; }
+.quick a:hover { text-decoration: underline; }
+.quick.pop { animation: pop 0.9s ease-out; }
+@keyframes pop {
+  0% { transform: scale(0.97); box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 60%, transparent); border-color: var(--accent); }
+  40% { transform: scale(1.01); box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 0%, transparent); border-color: var(--accent); }
+  100% { transform: scale(1); box-shadow: none; }
+}
+
+/* Steps whose content was just recomputed flash their outline once. */
+.step.updated { animation: updated 1.6s ease-out; }
+@keyframes updated {
+  0%, 30% { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+  100% { border-color: var(--line); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .quick.pop, .step.updated { animation: none; }
+}
+
 .notes ul { padding-left: 20px; }
 footer { padding: 18px 20px 40px; }
 
