@@ -63,7 +63,7 @@ function renderSamples() {
     btn.append(c);
     btn.addEventListener("click", () => {
       selectSample(i);
-      run(s.pixels, s.label, true);
+      classify(s.pixels, s.label, btn);
     });
     box.append(btn);
   });
@@ -116,7 +116,7 @@ function setupPad() {
       return;
     }
     selectSample(-1);
-    run(pixels, null, true);
+    classify(pixels, null, $("pad-use"));
   });
 }
 
@@ -333,6 +333,7 @@ function replay(el, cls) {
 function renderQuick(animate) {
   const { pixels, label, res, enc } = state;
   const box = $("quick");
+  box.className = "quick";
   let verdict = "";
   if (label !== null) {
     verdict = label === res.prediction
@@ -360,6 +361,45 @@ function renderQuick(animate) {
 }
 
 // ---------- pipeline ----------
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const STAGES = [
+  "Encrypting 100 patches on the client…",
+  "Server decrypting 800 inner products…",
+  "Running the rest of the network…",
+];
+let busy = false;
+
+/**
+ * Click handler for samples and the drawing pad. The computation itself takes ~20 ms, so the
+ * stages are paced (~1 s in total) to make it visible that the click started the protocol.
+ */
+async function classify(pixels, label, trigger) {
+  if (busy) return;
+  busy = true;
+  const box = $("quick");
+  const lbl = trigger.querySelector(".lbl");
+  const original = lbl?.textContent;
+  trigger.classList.add("loading");
+  trigger.disabled = true;
+  if (lbl) lbl.textContent = "Encrypting…";
+  const pause = matchMedia("(prefers-reduced-motion: reduce)").matches ? 150 : 340;
+  try {
+    for (let i = 0; i < STAGES.length; i++) {
+      box.className = "quick loading";
+      box.innerHTML = `<span class="spinner" aria-hidden="true"></span>
+        <span class="stage">${STAGES[i]}</span>
+        <span class="steps" aria-hidden="true">${STAGES.map((_, j) => `<i class="${j <= i ? "on" : ""}"></i>`).join("")}</span>`;
+      await sleep(pause);
+    }
+    run(pixels, label, true);
+  } finally {
+    trigger.classList.remove("loading");
+    trigger.disabled = false;
+    if (lbl) lbl.textContent = original;
+    busy = false;
+  }
+}
 
 function run(pixels, label, animate = false) {
   const enc = clientEncrypt(model, setup.ipfe, pixels);

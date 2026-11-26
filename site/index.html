@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PPML · Encrypted CNN inference in your browser</title>
   <meta name="description" content="Interactive demo: classify an MNIST digit while the server only ever sees ciphertexts, using inner-product functional encryption (IPFE).">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
   <header class="hero">
@@ -38,7 +38,7 @@
           <h3>…or draw one</h3>
           <canvas id="pad" width="280" height="280" class="pad" aria-label="Drawing pad"></canvas>
           <div class="row">
-            <button id="pad-use" class="primary">Classify drawing</button>
+            <button id="pad-use" class="primary"><span class="spinner" aria-hidden="true"></span><span class="lbl">Classify drawing</span></button>
             <button id="pad-clear">Clear</button>
           </div>
           <p class="hint" id="pad-hint" hidden>Draw a digit on the black pad first.</p>
@@ -126,6 +126,6 @@
     <a href="https://github.com/CedricBohni/PPML">github.com/CedricBohni/PPML</a>
   </footer>
 
-  <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/app.js?v=3"></script>
 </body>
 </html>
