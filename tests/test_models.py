@@ -1,7 +1,7 @@
 """The encrypted CNN must reproduce the plaintext CNN's predictions.
 
-Uses ``configs/base.yaml`` with a committed pretrained checkpoint (3x3 first-layer
-kernels) and synthetic uint8 images, so no training or dataset download is needed.
+Uses ``configs/base.yaml`` (which points at a committed pretrained checkpoint) and
+synthetic uint8 images, so no training or dataset download is needed.
 """
 
 import copy
@@ -30,10 +30,6 @@ def cfg():
         cfg = yaml.safe_load(f)
     cfg["save"]["models_dir"] = str(ROOT / cfg["save"]["models_dir"])
     cfg["device"] = "cpu"
-    cfg["model"]["k"] = [3, 3, 3, 3]  # matches models/k3_conv8_16_32_64_stride3_pad1_dropout0.5.pt
-    conv1 = torch.load(find_checkpoint(cfg), map_location="cpu")["backbone.conv1.weight"]
-    cfg["ipfe"]["prime"] = prime_finder(conv1, verbose=False)
-    cfg["ipfe"]["encryption_length"] = 9
     return cfg
 
 
@@ -46,6 +42,12 @@ def images():
 def test_model_tag_matches_checkpoint_name(cfg):
     assert _build_model_tag_from_cfg(cfg) == "k3_conv8_16_32_64_stride3_pad1_dropout0.5"
     assert find_checkpoint(cfg).exists()
+
+
+def test_configured_prime_is_large_enough(cfg):
+    conv1 = torch.load(find_checkpoint(cfg), map_location="cpu")["backbone.conv1.weight"]
+    assert cfg["ipfe"]["prime"] >= prime_finder(conv1, verbose=False)
+    assert cfg["ipfe"]["encryption_length"] == cfg["model"]["k"][0] ** 2
 
 
 def test_plain_cnn_output_shape(cfg, images):

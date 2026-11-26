@@ -1,8 +1,8 @@
 seed: 1337
 device: "cpu"
 ipfe:
-  prime: 6285761
-  encryption_length: 4 #2x2 -> 4 #3x3 -> 9 #5x5 ->25
+  prime: 8013587  # from prime_finder for models/k3_conv8_16_32_64_stride3_pad1_dropout0.5.pt
+  encryption_length: 9 # first kernel k*k: 2x2 -> 4, 3x3 -> 9, 5x5 -> 25
 data:
   name: "MNIST"
   root: "./data"
@@ -15,7 +15,7 @@ model:
   in_channels: 1
   num_classes: 10
   c: [8, 16, 32, 64]
-  k: [2, 3, 3, 3]
+  k: [3, 3, 3, 3]
   p: [0, 1, 1, 1] # 1 for you use pooling. 0 for not # standard is to just have all 1
   stride: [3, 1, 1, 1]
   padding: [1, 1, 1, 1]

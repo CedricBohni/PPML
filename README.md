@@ -177,6 +177,10 @@ evaluates it in plaintext or under IPFE, and writes the metrics to `results/`.
 uv run python -m src.main -r 1          # -r: repeat the run n times; --cfg: alternative config file
 ```
 
+The default config uses the committed checkpoint `models/k3_conv8_16_32_64_stride3_pad1_dropout0.5.pt` and a
+matching prime, so it runs without training. Set `model.name: "ipfe"` and `data.max_test_samples: 64` to try
+encrypted inference on 64 images in under a minute.
+
 **Workflow**
 
 1. **Configure** `configs/base.yaml`:
