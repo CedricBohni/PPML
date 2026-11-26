@@ -6,13 +6,39 @@ This project provides Jupyter notebooks and source files for testing different *
 
 ### Setup
 
-Before running the notebooks, tests, or demo, install the Python dependencies:
+This project uses [uv](https://docs.astral.sh/uv/) to manage Python and its dependencies. Supported Python versions are 3.12 and 3.13 (pinned to 3.12 via `.python-version`; uv downloads it automatically if needed).
+
+From the repository root, create the environment:
 
 ```bash
+uv sync
+```
+
+Then run any command through `uv run` (no manual activation needed), e.g. `uv run jupyter lab`. Run all commands from the repository root, since the code imports from `src` and uses relative paths (`./data`, `models/`). The MNIST dataset is downloaded to `./data` on first use.
+
+<details>
+<summary>Without uv (pip)</summary>
+
+`requirements.txt` is exported from `uv.lock` (`uv export --format requirements-txt --no-hashes --no-emit-project -o requirements.txt`):
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate        # Windows; on Linux/macOS: source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+Then drop the `uv run` prefix from the commands below.
+</details>
+
+**Troubleshooting:** if uv fails with `invalid peer certificate: UnknownIssuer` (common behind antivirus or corporate proxies), add `--system-certs`, e.g. `uv sync --system-certs`.
+
 ### Notebooks
+
+Start Jupyter with:
+
+```bash
+uv run jupyter lab
+```
 
 The Jupyter notebooks walk through all experimental steps of the project, each building upon the previous one. It is recommended to open and execute them **in order**:
 
@@ -48,8 +74,8 @@ The file `src/main.py` provides a full test suite for evaluating various **funct
 1. Edit the configuration file (`configs/base.yaml`) with your desired parameters.  
 2. Run the test suite:
    ```bash
-   python -m src.main -r 1
-    ```
+   uv run python -m src.main -r 1
+   ```
    Use the -r flag to repeat the run n times.
 
 ### Workflow
@@ -121,18 +147,20 @@ A client encrypts image data, sends it to the server, and receives predictions �
   - Encrypts unfolded MNIST patches and sends them for encrypted inference.
 
 #### Demo Workflow
+Run the server and client in two separate terminals, both from the repository root.
+
 1. **Start the server**
    ```bash
-   python Demo.server
-    ```  
-The server listens on 127.0.0.1:5000 and loads models:
+   uv run python -m Demo.server
+   ```
+   The server listens on 127.0.0.1:5000 and loads models:
 
-    models/demo_model_{1,2,3}.pth
+       models/demo_model_{1,2,3}.pth
 
 2. **Run the client**
-    ```bash
-    python Demo.client
-    ```  
+   ```bash
+   uv run python -m Demo.client
+   ```
 - Interactive prompt options
   - Command 0 – Close Demo
   - Command 1 – Choose a CNN variant and initialize IPFE parameters (prime, generator, vector length, and keys). 
