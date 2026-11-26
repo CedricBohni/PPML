@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PPML · Encrypted CNN inference in your browser</title>
+  <meta name="description" content="Interactive demo: classify an MNIST digit while the server only ever sees ciphertexts, using inner-product functional encryption (IPFE).">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="hero">
+    <div class="wrap">
+      <p class="eyebrow">Privacy-preserving machine learning</p>
+      <h1>Classify a digit the server never sees</h1>
+      <p class="lede">
+        The client encrypts every 3×3 patch of the image with <strong>inner-product functional encryption</strong>.
+        The server holds one functional key per convolution kernel, so it learns the first-layer outputs ⟨patch, kernel⟩
+        and nothing else about the pixels. Everything below runs locally in your browser.
+      </p>
+      <p class="links">
+        <a href="https://github.com/CedricBohni/PPML">Source code on GitHub</a>
+        <span aria-hidden="true">·</span>
+        <a href="https://eprint.iacr.org/2015/017">Abdalla et al., PKC 2015</a>
+      </p>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="step" id="step-input">
+      <div class="step-head"><span class="badge">1</span><h2>Choose a digit</h2><span class="role">client</span></div>
+      <p>Pick one of the MNIST test images, or draw your own.</p>
+      <div class="input-grid">
+        <div>
+          <h3>MNIST test images</h3>
+          <div id="samples" class="samples" role="listbox" aria-label="MNIST test images"></div>
+        </div>
+        <div>
+          <h3>…or draw one</h3>
+          <canvas id="pad" width="280" height="280" class="pad" aria-label="Drawing pad"></canvas>
+          <div class="row">
+            <button id="pad-use" class="primary">Classify drawing</button>
+            <button id="pad-clear">Clear</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="step" id="step-keys">
+      <div class="step-head"><span class="badge">2</span><h2>Generate keys</h2><span class="role">client</span></div>
+      <p>
+        The client picks a prime <var>p</var>, a generator <var>g</var> of ℤ<sub>p</sub>* and a secret vector
+        <var>s</var> (the master key). It publishes <var>h<sub>i</sub></var> = <var>g</var><sup><var>s<sub>i</sub></var></sup>
+        and derives one functional key <var>sk<sub>y</sub></var> = ⟨<var>s</var>, <var>y</var>⟩ per kernel <var>y</var>.
+        Only these keys are sent to the server.
+      </p>
+      <dl class="facts" id="key-facts"></dl>
+      <div class="kernels" id="kernels"></div>
+    </section>
+
+    <section class="step" id="step-encrypt">
+      <div class="step-head"><span class="badge">3</span><h2>Encrypt the patches</h2><span class="role">client</span></div>
+      <p>
+        The image is cut into 10×10 = 100 patches of 3×3 pixels (stride 3, zero padding). Each patch <var>x</var> is
+        encrypted as <var>ct<sub>0</sub></var> = <var>g<sup>r</sup></var>, <var>ct<sub>i</sub></var> =
+        <var>h<sub>i</sub><sup>r</sup></var> · <var>g</var><sup><var>x<sub>i</sub></var></sup> with fresh randomness
+        <var>r</var>. <strong>Hover over a patch</strong> to inspect it.
+      </p>
+      <div class="triptych">
+        <figure>
+          <canvas id="cv-input" width="28" height="28" class="pix"></canvas>
+          <figcaption>Input image (28×28)</figcaption>
+        </figure>
+        <figure>
+          <div class="pix-wrap"><canvas id="cv-patches" width="30" height="30" class="pix"></canvas><canvas id="ov-patches" width="300" height="300" class="overlay"></canvas></div>
+          <figcaption>100 plaintext patches (stay on the client)</figcaption>
+        </figure>
+        <figure>
+          <div class="pix-wrap"><canvas id="cv-cipher" width="30" height="30" class="pix"></canvas><canvas id="ov-cipher" width="300" height="300" class="overlay"></canvas></div>
+          <figcaption>What the server receives: ciphertexts</figcaption>
+        </figure>
+      </div>
+      <div class="row">
+        <button id="reencrypt">Re-encrypt with fresh randomness</button>
+        <span class="muted" id="enc-stats"></span>
+      </div>
+      <div class="inspector" id="inspector" aria-live="polite"></div>
+    </section>
+
+    <section class="step" id="step-decrypt">
+      <div class="step-head"><span class="badge">4</span><h2>Decrypt only the inner products</h2><span class="role server">server</span></div>
+      <p>
+        For each kernel <var>y</var> the server computes ∏ <var>ct<sub>i</sub></var><sup><var>y<sub>i</sub></var></sup> /
+        <var>ct<sub>0</sub></var><sup><var>sk<sub>y</sub></var></sup> = <var>g</var><sup>⟨<var>x</var>,<var>y</var>⟩</sup>
+        and recovers ⟨<var>x</var>,<var>y</var>⟩ with a baby-step giant-step discrete log. Adding the bias gives exactly
+        one value of the first convolution. Top row: decrypted feature maps. Bottom row: the same convolution
+        computed in plaintext, for comparison.
+      </p>
+      <div class="maps" id="maps"></div>
+      <p class="muted" id="dec-stats"></p>
+    </section>
+
+    <section class="step" id="step-predict">
+      <div class="step-head"><span class="badge">5</span><h2>Finish the network and predict</h2><span class="role server">server</span></div>
+      <p>The remaining layers run in plaintext on the decrypted feature maps.</p>
+      <div class="predict">
+        <div class="verdict" id="verdict"></div>
+        <div class="bars" id="bars" role="img" aria-label="Class probabilities"></div>
+      </div>
+    </section>
+
+    <section class="step notes">
+      <h2>What this demo does not claim</h2>
+      <ul>
+        <li><strong>Toy parameters.</strong> <var>p</var> ≈ 8 × 10<sup>6</sup> keeps the discrete log fast. Real DDH security needs 2048-bit groups or elliptic curves.</li>
+        <li><strong>Only the first layer is encrypted.</strong> The server learns the first-layer feature maps, which leak partial information about the input.</li>
+        <li><strong>The client sees the first-layer kernels.</strong> It acts as key authority, so it needs <var>y</var> to derive <var>sk<sub>y</sub></var>.</li>
+      </ul>
+      <p class="muted" id="model-info"></p>
+    </section>
+  </main>
+
+  <footer class="wrap muted">
+    Integrated Masters Project 2025 · Cedric Bohni &amp; Konstantin Wehmeyer ·
+    <a href="https://github.com/CedricBohni/PPML">github.com/CedricBohni/PPML</a>
+  </footer>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

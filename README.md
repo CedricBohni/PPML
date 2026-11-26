@@ -10,6 +10,13 @@ Classify an image **without the server ever seeing the image**. A client encrypt
 convolution kernel. With these keys it can compute exactly the kernel–patch inner products from the
 ciphertexts, and nothing else, then it finishes the CNN in plaintext.
 
+### ▶ [Try the interactive demo](https://cedricbohni.github.io/PPML/)
+
+Pick or draw a digit and watch it go through the protocol in your browser: key generation, the patches turned
+into ciphertext noise, decryption of only the inner products, and the final prediction.
+
+<a href="https://cedricbohni.github.io/PPML/"><img src="docs/demo.png" alt="Demo: a digit, its plaintext patches, the ciphertexts the server receives, and the decrypted feature maps next to the plaintext convolution" width="720"></a>
+
 Built as the **2025 Integrated Masters Project** by *Cedric Bohni* and *Konstantin Wehmeyer*.
 
 **Highlights**
@@ -174,7 +181,8 @@ antivirus software or corporate proxies, add `--system-certs`, e.g. `uv sync --s
 ├── configs/base.yaml                # benchmark configuration
 ├── models/                          # 29 pretrained benchmark checkpoints (+ notebook/demo models)
 ├── results/                         # raw benchmark outputs (one .txt per run)
-├── scripts/                         # results table and chart generation
+├── site/                            # interactive in-browser demo (GitHub Pages)
+├── scripts/                         # results, benchmark and web-model export scripts
 ├── docs/                            # generated results table and figures
 └── tests/                           # pytest suite (IPFE correctness, math, encrypted vs. plain CNN)
 ```
