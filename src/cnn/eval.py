@@ -1,12 +1,14 @@
 import torch
 from tqdm import tqdm
+
 from src.utils.timing import timed
+
 
 @torch.no_grad()
 def evaluate_top1(model, loader, device, cfg):
     model.eval()
     correct, total = 0, 0
-    
+
     # Pre-encrypt all batches outside timer if needed (to exclude encryption from timing)
     t_encrypt_elapsed = 0.0
     if cfg["optimizations"]["precrypted"] and cfg["model"]["name"] == "ipfe":
@@ -23,7 +25,7 @@ def evaluate_top1(model, loader, device, cfg):
         # Convert to list only if we need to iterate multiple times
         # Otherwise just use the loader directly in the timer
         batches_to_process = None
-    
+
     # Timer only measures inference time (encryption excluded)
     with timed(device=device) as t_eval:
         # Use pre-encrypted batches if available, otherwise use loader directly
@@ -34,12 +36,10 @@ def evaluate_top1(model, loader, device, cfg):
 
         # Show evaluation progress with tqdm
         for x, y in tqdm(batch_iter, desc="Evaluating", unit="batch"):
-            #print(f"y: {y}")
             pred = model(x).argmax(dim=1)
-            #print(f"pred: {pred}")
             total += y.size(0)
             correct += pred.eq(y).sum().item()
-    
+
     acc = 100.0 * correct / max(1, total)
     result = {"top1": acc, "eval_seconds": t_eval.elapsed}
     if cfg["optimizations"]["precrypted"] and cfg["model"]["name"] == "ipfe":

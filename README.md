@@ -1,25 +1,116 @@
-# PrivacyPreservingML
+# PPML: Privacy-Preserving CNN Inference with Functional Encryption
 
-Repository for the **2025 Integrated Masters Project** by *Cedric Bohni* and *Konstantin Wehmeyer*.
+[![CI](https://github.com/CedricBohni/PPML/actions/workflows/ci.yml/badge.svg)](https://github.com/CedricBohni/PPML/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.12%20%7C%203.13-blue)
+![PyTorch](https://img.shields.io/badge/PyTorch-2.9-ee4c2c)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-This project provides Jupyter notebooks and source files for testing different **privacy-preserving machine learning** techniques, along with a demo application that showcases **secure inference using functional encryption**. The encryption approach implements **Inner-Product Functional Encryption (IPFE)**.
+Classify an image **without the server ever seeing the image**. A client encrypts MNIST digits with
+**Inner-Product Functional Encryption (IPFE)**. The server receives one functional key per first-layer
+convolution kernel. With these keys it can compute exactly the kernel–patch inner products from the
+ciphertexts, and nothing else, then it finishes the CNN in plaintext.
 
-### Setup
+Built as the **2025 Integrated Masters Project** by *Cedric Bohni* and *Konstantin Wehmeyer*.
 
-This project uses [uv](https://docs.astral.sh/uv/) to manage Python and its dependencies. Supported Python versions are 3.12 and 3.13 (pinned to 3.12 via `.python-version`; uv downloads it automatically if needed).
+**Highlights**
 
-From the repository root, create the environment:
+- **DDH-based IPFE from scratch** ([Abdalla et al., PKC 2015](https://eprint.iacr.org/2015/017)), including
+  key derivation, baby-step giant-step discrete logs and automatic prime selection for a given network.
+- **Encrypted inference keeps the plaintext accuracy.** Test accuracy is the same in 21 of 24 benchmarked
+  CNN configurations. The only difference in the logits comes from quantizing the weights to 10⁻⁴.
+- **About 3.5× faster** encrypted evaluation than the pure-Python baseline (median over 27 configurations),
+  using Numba-compiled modular arithmetic and batched decryption.
+- **Reproducible research pipeline:** 8 step-by-step notebooks, a config-driven benchmark suite with
+  29 pretrained checkpoints, a TCP client–server demo, tests and CI.
 
-```bash
-uv sync
+## How it works
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Client (owns image, master key)
+    participant S as Server (owns CNN)
+    C->>S: request first-layer kernels
+    S->>C: kernels y (scaled to integers)
+    Note over C: Setup → (mpk, msk)<br/>sk_y = KeyDer(msk, y) for each kernel
+    C->>S: functional keys sk_y, p, g
+    Note over C: unfold image into k×k patches x<br/>encrypt each patch: Enc(mpk, x)
+    C->>S: ciphertexts only
+    Note over S: Dec(sk_y, Enc(x)) = ⟨x, y⟩ for every kernel and patch<br/>+ bias → BN → ReLU → remaining layers (plaintext)
+    S->>C: predicted digit
 ```
 
-Then run any command through `uv run` (no manual activation needed), e.g. `uv run jupyter lab`. Run all commands from the repository root, since the code imports from `src` and uses relative paths (`./data`, `models/`). The MNIST dataset is downloaded to `./data` on first use.
+The scheme works over the group ℤₚ* with generator *g*. The master secret key is *s* = (*s*₁, …, *sₗ*) and the
+public key is *hᵢ* = *g^sᵢ*.
+
+| Step | Operation |
+|---|---|
+| Encrypt patch **x** | ct₀ = *g^r*, ctᵢ = *hᵢ^r* · *g^xᵢ* |
+| Key for kernel **y** | sk_y = ⟨**s**, **y**⟩ |
+| Decrypt | ∏ ctᵢ^yᵢ / ct₀^sk_y = *g*^⟨**x**,**y**⟩, then recover ⟨**x**,**y**⟩ with baby-step giant-step |
+
+Kernel weights are scaled by 10⁴ and rounded to integers. The prime *p* must exceed twice the largest
+possible |⟨**x**,**y**⟩| so that negative results can be recovered. [`prime_finder`](src/cryptography/prime_finder.py)
+derives this bound from the trained weights and returns the next prime above it.
+
+## Results
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/speedup-dark.png">
+  <img alt="Median speed-up over sequential IPFE decryption: kernel + patch threads 2.03×, kernel threads 2.64×, batched Numba 3.52×, batched Numba + kernel threads 3.46×" src="docs/speedup-light.png">
+</picture>
+
+Selected configurations, timed on 64 MNIST test images (seconds for the whole encrypted evaluation):
+
+| Model | Params | Plain acc. | IPFE acc. | Sequential (s) | Batched Numba (s) |
+|---|--:|--:|--:|--:|--:|
+| 2×2, stride 2, 8→64 channels | 34,194 | – | 100.0% | 48.8 | 13.9 |
+| 3×3, stride 2, 8→64 channels | 34,234 | 100.0% | 100.0% | 46.1 | 14.2 |
+| 3×3, stride 1, 16→64 channels | 98,666 | 98.4% | 98.4% | 444.3 | 112.7 |
+| 5×5, stride 2, 8→32 channels | 11,642 | 100.0% | 100.0% | 48.1 | 13.5 |
+| 5×5, stride 1, 16→64 channels | 98,922 | 100.0% | 100.0% | 479.8 | 136.8 |
+
+The full table for all 28 models and every strategy is in [docs/results.md](docs/results.md) (raw data in
+[docs/results.csv](docs/results.csv)). To regenerate the table and the chart from `results/`:
+
+```bash
+uv run python scripts/summarize_results.py --out docs/results.md --csv docs/results.csv
+uv run python scripts/plot_results.py
+```
+
+**What the numbers show**
+
+- Cost scales with the number of patches × kernels. A 3×3 first layer with stride 1 produces 784 patches
+  per image, against 100 with stride 3, and takes about 8–9× as long.
+- Most of the speed-up comes from Numba. The baseline decrypts with the pure-Python implementation,
+  while all four strategies use the JIT-compiled one. Batching every patch into a single compiled loop
+  per kernel is fastest.
+- Threads add little or even cost time: kernel + patch threads are slower than kernel threads alone.
+  The Numba functions are compiled without `nogil=True`, so they hold Python's GIL and the threads
+  can't decrypt in parallel. Releasing the GIL is the obvious next optimization.
+- Accuracy differs in three configurations. Two of them are off by one image out of 64. The model whose
+  first layer has a single output channel drops to 68.8%.
+
+## Quick start
+
+This project uses [uv](https://docs.astral.sh/uv/). It supports Python 3.12 and 3.13; uv downloads a
+suitable interpreter automatically.
+
+```bash
+git clone https://github.com/CedricBohni/PPML.git
+cd PPML
+uv sync
+uv run pytest
+```
+
+`uv run pytest` runs the tests, which takes about 20 s.
+
+Run every command from the repository root. The MNIST dataset is downloaded to `./data` on first use.
 
 <details>
 <summary>Without uv (pip)</summary>
 
-`requirements.txt` is exported from `uv.lock` (`uv export --format requirements-txt --no-hashes --no-emit-project -o requirements.txt`):
+`requirements.txt` is exported from `uv.lock` (`uv export --no-dev --no-hashes --no-emit-project -o requirements.txt`):
 
 ```bash
 python -m venv .venv
@@ -30,139 +121,139 @@ pip install -r requirements.txt
 Then drop the `uv run` prefix from the commands below.
 </details>
 
-**Troubleshooting:** if uv fails with `invalid peer certificate: UnknownIssuer` (common behind antivirus or corporate proxies), add `--system-certs`, e.g. `uv sync --system-certs`.
+**Troubleshooting:** if uv fails with `invalid peer certificate: UnknownIssuer`, which is common behind
+antivirus software or corporate proxies, add `--system-certs`, e.g. `uv sync --system-certs`.
 
-### Notebooks
+## Repository layout
 
-Start Jupyter with:
-
-```bash
-uv run jupyter lab
+```text
+├── 00_basic_cnn.ipynb … 04_3_batch_kernel_ipfe_cnn.ipynb   # step-by-step research notebooks
+├── src/
+│   ├── cryptography/
+│   │   ├── cnn_ipfe.py              # reference IPFE implementation (pure Python)
+│   │   ├── optimized_cnn_ipfe.py    # Numba-accelerated IPFE + batch decryption
+│   │   ├── prime_finder.py          # smallest safe prime for a given first layer
+│   │   └── prototype/               # first IPFE prototype on raw vectors
+│   ├── cnn/
+│   │   ├── models.py                # PlainCNN and IPFECNN (encrypted first layer, 4 strategies)
+│   │   ├── data.py, train.py, eval.py, utils.py
+│   ├── utils/math_helper.py         # modular arithmetic, generators, primes, discrete log
+│   └── main.py                      # config-driven benchmark suite
+├── Demo/                            # TCP client–server encrypted inference demo
+├── configs/base.yaml                # benchmark configuration
+├── models/                          # 29 pretrained benchmark checkpoints (+ notebook/demo models)
+├── results/                         # raw benchmark outputs (one .txt per run)
+├── scripts/                         # results table and chart generation
+├── docs/                            # generated results table and figures
+└── tests/                           # pytest suite (IPFE correctness, math, encrypted vs. plain CNN)
 ```
 
-The Jupyter notebooks walk through all experimental steps of the project, each building upon the previous one. It is recommended to open and execute them **in order**:
+## Notebooks
 
-1. **`00_basic_cnn.ipynb`** – Trains and evaluates a simple CNN on MNIST, visualizing filters and activations.  
-2. **`01_modified_cnn.ipynb`** – Explores CNN variations (architecture, preprocessing) and trains weights for IPFE.  
-   - This notebook saves the trained model in the `models/` folder:
-     ```
-     cnn_model_1.pth
-     ```
-3. **`02_basic_ipfe_cnn.ipynb`** – Introduces IPFE applied to the first CNN layer.  
-4. **`03_extracted_encrypt_ipfe_cnn.ipynb`** – Extracts and encrypts image patches separately, using an optimized prime.  
-5. **`04_0_kernel_ipfe_cnn.ipynb`** – Applies IPFE at the kernel level.  
-6. **`04_1_kernel_patch_ipfe_cnn.ipynb`** – Tests the kernel-patch approach and compares results.  
-7. **`04_2_batch_ipfe_cnn.ipynb`** – Implements batch-based performance measurements and parallel decryption with compiler optimizations.  
-8. **`04_3_batch_kernel_ipfe_cnn.ipynb`** – Extends the previous batching approach to kernel-level IPFE.
+The notebooks walk through every experimental step, each building on the previous one. Start Jupyter
+with `uv run jupyter lab` and run them **in order**:
 
-**Notes and tips**
-- Some notebooks require pretrained weights from the `models/` directory. If missing, the notebook may retrain or raise an error; review the top cells for a `load model` option.  
-- To only visualize filters and activations, you can skip training and load a provided model.  
-- Long-running cells (e.g., training or large-batch experiments) show progress bars — interrupt the kernel to stop execution.
+1. **`00_basic_cnn.ipynb`**: trains and evaluates a simple CNN on MNIST, visualizing filters and activations.
+2. **`01_modified_cnn.ipynb`**: explores CNN variations (architecture, preprocessing) and trains weights
+   for IPFE. Saves `models/cnn_model_1.pth`.
+3. **`02_basic_ipfe_cnn.ipynb`**: applies IPFE to the first CNN layer.
+4. **`03_extracted_encrypt_ipfe_cnn.ipynb`**: extracts and encrypts image patches separately, using an
+   optimized prime.
+5. **`04_0_kernel_ipfe_cnn.ipynb`**: applies IPFE at the kernel level.
+6. **`04_1_kernel_patch_ipfe_cnn.ipynb`**: tests the kernel-patch approach and compares results.
+7. **`04_2_batch_ipfe_cnn.ipynb`**: batch-based performance measurements and parallel decryption with
+   compiler optimizations.
+8. **`04_3_batch_kernel_ipfe_cnn.ipynb`**: extends the batching approach to kernel-level IPFE.
 
-**Reproducing results**
-- Run each notebook from top to bottom to reproduce figures and results.  
-- For long runtimes, checkpoints or flags are provided to load precomputed outputs from the `results/` folder.
+Some notebooks load pretrained weights from `models/`; check the top cells for a `load model` option.
+Long-running cells show progress bars. Interrupt the kernel to stop them.
 
----
+## Benchmark suite
 
-### Test Suite
+[`src/main.py`](src/main.py) trains or loads a CNN described by [`configs/base.yaml`](configs/base.yaml),
+evaluates it in plaintext or under IPFE, and writes the metrics to `results/`.
 
-The file `src/main.py` provides a full test suite for evaluating various **functional encryption schemes and CNN architectures**, requiring minimal manual interaction.
+```bash
+uv run python -m src.main -r 1          # -r: repeat the run n times; --cfg: alternative config file
+```
 
-**Quick start**
-1. Edit the configuration file (`configs/base.yaml`) with your desired parameters.  
-2. Run the test suite:
-   ```bash
-   uv run python -m src.main -r 1
+**Workflow**
+
+1. **Configure** `configs/base.yaml`:
+   - `seed`, `device`, `data.batch_size`, `data.num_workers`
+   - `data.max_test_samples`: limit the number of test images (empty = all)
+   - `ipfe.prime` and `ipfe.encryption_length` (k², e.g. 4 for a 2×2 kernel)
+   - `model.name`: `"plain"` (unencrypted) or `"ipfe"` (encrypted). An encrypted run needs a trained
+     plain model with the same architecture.
+   - Architecture: `in_channels`, `num_classes` and the per-layer lists `c` (channels), `k` (kernel sizes),
+     `p` (pooling 0/1), `stride` and `padding`. All lists must have the same length. Also `dropout`.
+   - `optimizations`: keep `precrypted: true` so that encryption is timed separately. Enable **at most one**
+     of `kernel_parallelization`, `kernel_patches_parallelization`, `batch_parallelization` and
+     `batch_kernels_parallelization`, or none for the sequential baseline.
+2. **Train the base model.** Run with `name: "plain"`. If no checkpoint matches the architecture, the
+   suite trains one and saves it as e.g. `models/k2_conv8_16_32_64_stride3_pad1_dropout0.5.pt`.
+3. **Pick the prime.** When a plain checkpoint is loaded, the suite prints the bound and a suggested prime:
+
+   ```text
+   Maximum absolute inner product over all slices: 313.33173
+   Scaled maximum absolute inner product (x10000): 3.1333172e+06
+   Suggested prime minimum (scaled max * 2): 6.2666345e+06
+   Suggested prime (next prime above minimum): 6266657
    ```
-   Use the -r flag to repeat the run n times.
 
-### Workflow
+   Put that prime into `ipfe.prime`.
+4. **Run encrypted.** Set `name: "ipfe"` and run again. Results are saved to `results/`.
 
-1. **Edit the configuration file**  
-   Configure parameters in `configs/base.yaml`:
-   - Random seed for reproducibility  
-   - Prime value for IPFE and vector size (e.g., 4 for a 2×2 kernel)  
-   - Batch size and dataset location  
-   - Number of workers for parallelization  
-   - `max_test_samples` to limit test images (empty = all)  
-   - `name` to toggle between `"ipfe"` (encrypted) and `"plain"` (unencrypted)`  
-     - Encrypted runs require a prior unencrypted run with identical configs.  
+## Client–server demo
 
-   **Architecture parameters**
-   - `in_channels`: Input channels (1 for grayscale, 3 for RGB)  
-   - `num_classes`: For MNIST, use 10  
-   - Convolutional layer parameters (each list must have the same length):  
-     - `c`: Kernel sizes  
-     - `k`: Kernel strides  
-     - `p`: Pooling options (0 = none, 1 = enabled)  
-     - `stride`: Strides per layer  
-     - `padding`: Padding per layer  
-   - `dropout`: Dropout rate in the fully connected layer  
-   - **Optimization options:**  
-     - `precrypt`: Usually set to `true`  
-     - Only one optimization option should be `true` at a time (set all to `false` for a baseline run).  
-   - Additional fields define training parameters and model save paths.
+A client encrypts MNIST patches, sends only ciphertexts over TCP, and receives the prediction.
+Run the two parts in separate terminals from the repository root:
 
-2. **Train the base model**  
-   Run a `"plain"` configuration with `max_test_samples: None`.  
-   This will start model training and display batch, loss, and accuracy per epoch, then automatically save the model:
+```bash
+uv run python -m Demo.server     # listens on 127.0.0.1:5000, loads models/demo_model_{1,2,3}.pth
+uv run python -m Demo.client
+```
 
-        k2_conv8_16_32_64_stride3_pad1_dropout0.5.pt
+The client's interactive commands:
 
-3. **Run a baseline test**  
-   After training, run the model with a chosen number of test images.  
-   Example terminal output:
-       
-        Run ========================= 1
-        Maximum absolute inner product over all slices: 313.33173
-        Scaled maximum absolute inner product (x10000): 3.1333172e+06
-        Suggested prime minimum (scaled max * 2): 6.2666345e+06
-        Evaluating on test set...
+| Command | Action |
+|---|---|
+| `1` | Choose a CNN variant and initialize IPFE (prime, generator, vector length, keys) |
+| `2` | Choose how many MNIST test images to encrypt (the client unfolds and encrypts each patch) |
+| `3` | Send the encrypted patches to the server and receive predictions |
+| `0` | Close the demo |
 
-    From the suggested minimum, find (manually or with a tool) the next greater prime.  
-    Use this prime value in the IPFE configuration.
+## Development
 
-4. **Run the encrypted version**  
-Execute the same configuration with `name: ipfe`.  
-All results will be saved in the `results/` folder.
+```bash
+uv run pytest                  # tests
+uv run ruff check .            # lint
+uv run ruff format .           # format
+```
 
-   
-### Encrypted Convolution Inference Demo (Server–Client)
+CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs lint and tests on every push and pull request.
+The tests check IPFE correctness for both implementations, the number-theory helpers, prime selection,
+and that every encrypted-inference strategy reproduces the plaintext CNN's predictions.
 
-This demo illustrates **privacy-preserving CNN inference** using **Inner-Product Functional Encryption (IPFE)**.  
-A client encrypts image data, sends it to the server, and receives predictions — all without exposing plaintext data.
+## Limitations
 
-#### Overview
+This is a research prototype that explores how practical IPFE is for CNN inference. It is not a
+production-ready secure system.
 
-- **`server.py`**
-  - Runs a TCP server that loads a pretrained CNN on MNIST.
-  - Handles model selection, IPFE setup, and encrypted inference.
-  - Decrypts IPFE ciphertexts only enough to compute first-layer inner products before completing the remaining layers in plaintext.
+- **The parameters are not cryptographically secure.** Primes around 10⁶–10⁷ keep the discrete log
+  in decryption tractable, but they are far too small for real-world DDH security, which needs groups
+  of 2048 bits or more, or elliptic curves.
+- **Only the first layer is computed under encryption.** The server learns the first-layer feature
+  maps, which reveal partial information about the input. Everything after that runs in plaintext.
+- **The client sees the first-layer weights.** In the demo, the client is the key authority, so the
+  server sends it the kernels in order to get functional keys for them.
+- **Decryption cost grows with the message range,** because baby-step giant-step takes √p time. This
+  limits weight precision and the size of the network.
 
-- **`client.py`**
-  - Connects to the server and fetches first-layer CNN weights.
-  - Initializes an IPFE instance using the selected model configuration.
-  - Encrypts unfolded MNIST patches and sends them for encrypted inference.
+## Authors
 
-#### Demo Workflow
-Run the server and client in two separate terminals, both from the repository root.
+**Cedric Bohni** and **Konstantin Wehmeyer**, Integrated Masters Project 2025.
 
-1. **Start the server**
-   ```bash
-   uv run python -m Demo.server
-   ```
-   The server listens on 127.0.0.1:5000 and loads models:
+## License
 
-       models/demo_model_{1,2,3}.pth
-
-2. **Run the client**
-   ```bash
-   uv run python -m Demo.client
-   ```
-- Interactive prompt options
-  - Command 0 – Close Demo
-  - Command 1 – Choose a CNN variant and initialize IPFE parameters (prime, generator, vector length, and keys). 
-  - Command 2 – Select the number of MNIST test images to encrypt (the client unfolds and encrypts each patch). 
-  - Command 3 – Send encrypted patches to the server and receive model predictions.
+[MIT](LICENSE)

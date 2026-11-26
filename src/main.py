@@ -1,12 +1,15 @@
-import argparse, yaml, torch
-from pathlib import Path
+import argparse
 
-from src.utils.seed import set_seed
+import torch
+import yaml
+
 from src.cnn.data import make_mnist_loaders
-from src.cnn.models import PlainCNN, IPFECNN
-from src.cnn.train import fit
 from src.cnn.eval import evaluate_top1
-from src.cnn.utils import make_run_dir, save_config, save_checkpoint, find_checkpoint, _build_model_tag_from_cfg
+from src.cnn.models import IPFECNN, PlainCNN
+from src.cnn.train import fit
+from src.cnn.utils import _build_model_tag_from_cfg, find_checkpoint, save_checkpoint
+from src.utils.seed import set_seed
+
 
 def load_cfg(path_list):
     cfg = {}
@@ -21,6 +24,7 @@ def load_cfg(path_list):
                 cfg[k] = v
     return cfg
 
+
 def build_model(cfg):
     if cfg["model"]["name"] == "plain":
         return PlainCNN(cfg)
@@ -28,6 +32,7 @@ def build_model(cfg):
         return IPFECNN(cfg)
     else:
         raise ValueError("Unknown model.name")
+
 
 def load_model_from_cfg(cfg):
     # 1) Build model
@@ -37,12 +42,12 @@ def load_model_from_cfg(cfg):
         model = IPFECNN(cfg)
 
     # 2) Locate checkpoint using the config-based tag
-    models_dir = Path(cfg["save"]["models_dir"])
     ckpt_path = find_checkpoint(cfg)
 
     # 3) Load weights
     model.load_from_checkpoint(str(ckpt_path))
     return model
+
 
 def save_metrics_to_txt(cfg, total_params, test_metrics, loaders, train_metrics):
     """
@@ -78,13 +83,14 @@ def save_metrics_to_txt(cfg, total_params, test_metrics, loaders, train_metrics)
             ckpt_path = find_checkpoint(cfg)
             f.write(f"Weights Loaded From: {ckpt_path}\n")
         else:
-            f.write(f"Trained From Scratch\n")
+            f.write("Trained From Scratch\n")
             for k, v in train_metrics.items():
                 f.write(f"Train {k}: {v}\n")
         f.write(f"Test set size: {len(loaders['test'].dataset)}\n")
         for k, v in test_metrics.items():
             f.write(f"Test {k}: {v}\n")
     print(f"Saved metrics to: {txt_path}")
+
 
 def main(cfg):
     set_seed(cfg["seed"])
@@ -93,9 +99,8 @@ def main(cfg):
     loaders = make_mnist_loaders(cfg)
 
     try:
-        ckpt_path = find_checkpoint(cfg)
+        find_checkpoint(cfg)  # raises FileNotFoundError -> train from scratch below
         model = load_model_from_cfg(cfg)
-        #print(f"Model loaded from checkpoint: {ckpt_path}")
         total_params = sum(p.numel() for p in model.parameters())
         train_metrics = None
     except FileNotFoundError:
@@ -109,11 +114,9 @@ def main(cfg):
         save_checkpoint(model, cfg)
         print(f"Saved checkpoint to: {find_checkpoint(cfg)}")
 
-
     # Evaluate (test set)
     print("Evaluating on test set...")
     test_metrics = evaluate_top1(model, loaders["test"], device=str(device), cfg=cfg)
-    #print(f"Test set size: {len(loaders['test'].dataset)}")
     print(f"Eval seconds: {test_metrics['eval_seconds']:.2f}")
     print(f"Test Top-1: {test_metrics['top1']:.2f}%")
 
@@ -122,12 +125,7 @@ def main(cfg):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--runs", "-r",
-        type=int,
-        default=1,
-        help="Number of times to run the evaluation"
-    )
+    parser.add_argument("--runs", "-r", type=int, default=1, help="Number of times to run the evaluation")
     parser.add_argument("--cfg", default="configs/base.yaml")
     parser.add_argument("--save_weights", action="store_true")
     args = parser.parse_args()

@@ -1,17 +1,20 @@
-import socket
 import json
 import random
-from src.utils.math_helper import find_generator
+import socket
+import struct
+
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
-import torchvision.transforms as transforms
-from torchvision.datasets import MNIST
 import torch.nn as nn
-import struct
+import torchvision.transforms as transforms
+from torch.utils.data import DataLoader
+from torchvision.datasets import MNIST
+
+from src.utils.math_helper import find_generator
 
 HOST = "127.0.0.1"
 PORT = 5000
+
 
 def main():
     prime = None
@@ -38,8 +41,12 @@ def main():
                 break
 
             elif command == 1:
-
-                model = int(input("1: 3x3,1,1 [16,32,64], 2: 5x5,3,1 [8,16,32,64], 3: 3x3,3,1 [8,16,32] \n Which model do you want: "))
+                model = int(
+                    input(
+                        "1: 3x3,1,1 [16,32,64], 2: 5x5,3,1 [8,16,32,64], 3: 3x3,3,1 [8,16,32] \n"
+                        " Which model do you want: "
+                    )
+                )
 
                 if model not in [1, 2, 3]:
                     print("Please enter a valid model")
@@ -76,12 +83,7 @@ def main():
                 generator = ipfe.g
                 sk_y_array = [ipfe.key_derive(y) for y in y_array]
 
-                json_data = {
-                    "prime": prime,
-                    "generator": generator,
-                    "length": length,
-                    "sk_y": sk_y_array
-                }
+                json_data = {"prime": prime, "generator": generator, "length": length, "sk_y": sk_y_array}
 
                 print("Sending ipfe data...")
                 data = send(s, "INITIALIZE", json_data)
@@ -92,7 +94,6 @@ def main():
                 if ipfe is None:
                     print("IPFE not initialized.")
                 else:
-
                     amount = int(input("How many images do you want to encrypt: "))
 
                     if not is_positive_int(amount):
@@ -100,16 +101,16 @@ def main():
                         continue
 
                     print("Encrypting data...")
-                    transform = transforms.Compose([
-                        transforms.Lambda(lambda pic: torch.tensor(np.array(pic), dtype=torch.float32).unsqueeze(0))
-                    ])
+                    transform = transforms.Compose(
+                        [transforms.Lambda(lambda pic: torch.tensor(np.array(pic), dtype=torch.float32).unsqueeze(0))]
+                    )
 
                     batch_size = 64
-                    test_dataset = MNIST(root='./data', train=False, download=True, transform=transform)
+                    test_dataset = MNIST(root="./data", train=False, download=True, transform=transform)
                     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
                     with torch.no_grad():
-                        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+                        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
                         data_iter = iter(test_loader)
                         images, labels = next(data_iter)
@@ -163,6 +164,7 @@ def main():
 
                     print("Server replied:", data)
 
+
 class IPFE:
     def __init__(self, p):
         self.p = p
@@ -188,7 +190,11 @@ class IPFE:
 
         ct0 = pow(int(self.g), int(r), int(self.p))
 
-        ct = [(pow(int(h_i), int(r), int(self.p)) * pow(int(self.g), int(x_i) % (int(self.p) - 1), int(self.p))) % int(self.p) for h_i, x_i in zip(self.mpk, x)]
+        ct = [
+            (pow(int(h_i), int(r), int(self.p)) * pow(int(self.g), int(x_i) % (int(self.p) - 1), int(self.p)))
+            % int(self.p)
+            for h_i, x_i in zip(self.mpk, x)
+        ]
 
         return ct0, ct
 
@@ -197,21 +203,24 @@ class IPFE:
             raise ValueError("y length does not match setup length.")
         return sum((si * yi) % (self.p - 1) for si, yi in zip(self.msk, y)) % (self.p - 1)
 
+
 def send_message(sock, text):
     data = text.encode("utf-8")
     length = len(data)
     sock.sendall(struct.pack("!I", length))  # send 4-byte length
     sock.sendall(data)
 
+
 def recvall(sock, n):
     """Receive exactly n bytes."""
-    data = b''
+    data = b""
     while len(data) < n:
         packet = sock.recv(n - len(data))
         if not packet:
             return None
         data += packet
     return data
+
 
 def receive_message(sock):
     """Receive a length-prefixed message."""
@@ -226,6 +235,7 @@ def receive_message(sock):
     data = recvall(sock, length)
     return data.decode("utf-8")
 
+
 def send(sock, command, data):
     message = f"{command}|{json.dumps(data)}"
     message_bytes = message.encode("utf-8")
@@ -238,8 +248,10 @@ def send(sock, command, data):
     reply = receive_message(sock)
     return json.loads(reply)
 
+
 def is_positive_int(value):
     return isinstance(value, int) and value > 0
+
 
 if __name__ == "__main__":
     main()

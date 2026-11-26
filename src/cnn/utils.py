@@ -1,5 +1,8 @@
-import os, json, torch
+import json
 from pathlib import Path
+
+import torch
+
 
 def make_run_dir(cfg):
     """
@@ -13,9 +16,11 @@ def make_run_dir(cfg):
     base.mkdir(parents=True, exist_ok=True)
     return base
 
+
 def save_config(path: Path, cfg: dict):
     with open(path / "cfg.json", "w") as f:
         json.dump(cfg, f, indent=2)
+
 
 def _build_model_tag_from_cfg(cfg: dict) -> str:
     """
@@ -58,10 +63,11 @@ def save_checkpoint(model, cfg):
     Path(cfg["save"]["models_dir"]).mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(), Path(cfg["save"]["models_dir"]) / f"{tag}.pt")
 
+
 def find_checkpoint(cfg: dict = None) -> Path:
     """
     Find checkpoint file in a directory.
-    
+
     Args:
         cfg: Config dict to generate checkpoint name
     """

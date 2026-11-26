@@ -1,15 +1,18 @@
-import socket
 import json
+import socket
+import struct
+
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import struct
-import numpy as np
 from numba import njit
-from src.utils.math_helper import mod_pow_numba, mod_inv_numba, bsgs_numba
+
+from src.utils.math_helper import bsgs_numba, mod_inv_numba, mod_pow_numba
 
 HOST = "127.0.0.1"
 PORT = 5000
+
 
 def main():
 
@@ -36,6 +39,7 @@ def main():
 
                 send_message(conn, response)
 
+
 @njit
 def decrypt_fast(ct0, cts, sk_y, y, p):
     num = 1
@@ -46,6 +50,7 @@ def decrypt_fast(ct0, cts, sk_y, y, p):
     denom = mod_pow_numba(ct0, sk_y % (p - 1), p)
     val = (num * mod_inv_numba(denom, p)) % p
     return val
+
 
 @njit
 def decrypt_patches_batch(ct0_array, cts_array, sk_y, y_vec, g, p):
@@ -83,15 +88,17 @@ def decrypt_patches_batch(ct0_array, cts_array, sk_y, y_vec, g, p):
 
     return results
 
+
 class IPFE:
     def __init__(self, prime, generator, l):
         self.p = prime
         self.g = generator
         self.length = l
 
+
 class IPFECNN(nn.Module):
     def __init__(self, version, device, num_classes=10):
-        super(IPFECNN, self).__init__()
+        super().__init__()
         self.prime = None
         self.ipfe = None
         self.version = version
@@ -166,12 +173,16 @@ class IPFECNN(nn.Module):
 
             self.dim_first = 10
 
-        #copy weights from the trained model
+        # copy weights from the trained model
         self.load_state_dict(torch.load(f"models/demo_model_{version}.pth", map_location=device))
         print("weights copied from trained model")
 
         self.weights = self.conv1.weight.data
-        self.y_array = torch.round(self.weights.view(self.weights.size(0), -1).squeeze(1).view(self.weights.size(0), -1) * 10000).long().tolist()
+        self.y_array = (
+            torch.round(self.weights.view(self.weights.size(0), -1).squeeze(1).view(self.weights.size(0), -1) * 10000)
+            .long()
+            .tolist()
+        )
         print("weights converted to y vectors")
         self.biases = self.conv1.bias
         print("biases saved")
@@ -233,15 +244,17 @@ class IPFECNN(nn.Module):
             outputs.append(self.fc2(feat))
         return torch.cat(outputs, dim=0)
 
+
 def recvall(conn, n):
     """Receive exactly n bytes."""
-    data = b''
+    data = b""
     while len(data) < n:
         packet = conn.recv(n - len(data))
         if not packet:
             return None
         data += packet
     return data
+
 
 def receive_message(conn):
     """Receive one length-prefixed message."""
@@ -256,6 +269,7 @@ def receive_message(conn):
 
     return data.decode("utf-8")
 
+
 def send_message(conn, obj):
     """Send Python dict or string back to the client."""
     # Convert Python reply (dict, list, string) to JSON text
@@ -268,6 +282,7 @@ def send_message(conn, obj):
     conn.sendall(header)
     conn.sendall(obj)
 
+
 def parse_message(raw):
     """
     Expect format: COMMAND|{json}
@@ -277,13 +292,14 @@ def parse_message(raw):
         command, json_str = raw.split("|", 1)
         data = json.loads(json_str)
         return command.strip(), data
-    except Exception as e:
+    except Exception:
         return None, None
+
 
 def handle(model, command, data):
     if command == "WEIGHTS":
         m = int(data.get("model"))
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if m == 1:
             new_model = IPFECNN(device=device, version=1, num_classes=10)
         elif m == 2:
@@ -305,8 +321,7 @@ def handle(model, command, data):
         raw_data_set = data.get("dataset")
 
         data_set = [
-            (np.array(ct0_list, dtype=np.int64),
-             np.array(cts_list, dtype=np.int64))
+            (np.array(ct0_list, dtype=np.int64), np.array(cts_list, dtype=np.int64))
             for ct0_list, cts_list in raw_data_set
         ]
 
@@ -328,6 +343,7 @@ def handle(model, command, data):
         return model, {"error": "inference failed"}
 
     return model, {"error": "unknown command"}
+
 
 if __name__ == "__main__":
     main()

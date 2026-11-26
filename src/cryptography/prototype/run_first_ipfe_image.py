@@ -1,44 +1,45 @@
-import numpy as np
-from src.cryptography.prototype.first_ipfe import IPFE
 import random
-import matplotlib.pyplot as plt
-from torchvision.datasets import MNIST
-from torchvision import transforms
-import torch
 
-# initial test run of the IPFE scheme with image inputs
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+from torchvision import transforms
+from torchvision.datasets import MNIST
+
+from src.cryptography.prototype.first_ipfe import IPFE
+
+# Initial test run of the IPFE scheme with image inputs.
+# Run from the repository root: uv run python -m src.cryptography.prototype.run_first_ipfe_image
 
 if __name__ == "__main__":
+
     class ToTensor255:
         def __call__(self, pic):
             # Convert PIL image to a torch tensor (H x W)
             return torch.tensor(np.array(pic), dtype=torch.float32)
 
-
-    transform = transforms.Compose([
-        ToTensor255()
-    ])
+    transform = transforms.Compose([ToTensor255()])
 
     # Load training and test datasets
-    train_dataset = MNIST(root='../../../data', train=True, download=True, transform=transform)
+    train_dataset = MNIST(root="./data", train=True, download=True, transform=transform)
 
     print(train_dataset[0])
 
     image = train_dataset[0][0]
     label = train_dataset[0][1]
-    plt.imshow(image, cmap='gray')
+    plt.imshow(image, cmap="gray")
     plt.title("Original image")
     plt.show()
     plt.close()
     print(f"Image shape: {image.shape}, Label: {label}")
 
-    image_array = image.view(-1).cpu().numpy()# [int(val * 1000) % (self.prime - 1) for val in x_flat[i]]
+    image_array = image.view(-1).cpu().numpy()  # [int(val * 1000) % (self.prime - 1) for val in x_flat[i]]
     print(f"Flattened image shape: {image_array.shape}")
 
     p = 104729
     x = [int(val) % (p - 1) for val in image_array]
 
-    plt.imshow(np.asarray(x).reshape(28, 28), cmap='gray')
+    plt.imshow(np.asarray(x).reshape(28, 28), cmap="gray")
     plt.title("Converted image")
     plt.show()
     plt.close()

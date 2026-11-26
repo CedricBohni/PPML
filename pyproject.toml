@@ -1,6 +1,14 @@
 [project]
 name = "ppml"
 version = "0.1.0"
+description = "Privacy-preserving CNN inference on MNIST with Inner-Product Functional Encryption (IPFE)."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Cedric Bohni" },
+    { name = "Konstantin Wehmeyer" },
+]
 requires-python = ">=3.12,<3.14"
 dependencies = [
     "ipykernel==7.0.1",
@@ -13,4 +21,40 @@ dependencies = [
     "torch==2.9.0",
     "torchvision==0.24.0",
     "tqdm==4.67.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.8",
+]
+
+# The project only needs CPU inference. On Linux, PyPI's torch wheels pull ~2 GB of CUDA
+# libraries, so take torch/torchvision from the CPU-only index there (e.g. in CI).
+# Windows and macOS wheels on PyPI are already CPU builds.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"
+filterwarnings = ["ignore::numba.core.errors.NumbaPendingDeprecationWarning"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["*.ipynb"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = [
+    "E741", # `l` is the vector length in the IPFE paper's notation
+    "B905", # zip() without strict= mirrors the original scheme code
 ]

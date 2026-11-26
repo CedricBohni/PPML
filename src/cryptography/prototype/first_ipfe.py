@@ -1,11 +1,13 @@
 import random
 
-import numpy as np
-from src.utils.math_helper import inv_mod, bsgs, find_generator
 import matplotlib.pyplot as plt
+import numpy as np
+
+from src.utils.math_helper import bsgs, find_generator, inv_mod
 
 # First implementation of the DDH IPFE scheme with simple numerical array inputs
 # not made to handle direct usage in a convolutional layer
+
 
 class IPFE:
     def __init__(self, p):
@@ -37,7 +39,7 @@ class IPFE:
 
         # mpk = [h_0 ... h_n] = [h_i] = [g^(s_i)]
         # ct_i = (h_i)^r * g^(x_i) mod p
-        ct = [(pow(h_i, r, self.p) * pow(self.g, x_i % (self.p-1), self.p)) % self.p for h_i, x_i in zip(self.mpk, x)]
+        ct = [(pow(h_i, r, self.p) * pow(self.g, x_i % (self.p - 1), self.p)) % self.p for h_i, x_i in zip(self.mpk, x)]
 
         return ct0, ct
 
@@ -74,7 +76,7 @@ class IPFE:
         ct = self.encrypt(x)
 
         if image:
-            plt.imshow(np.asarray(ct[1]).reshape(28, 28), cmap='gray')
+            plt.imshow(np.asarray(ct[1]).reshape(28, 28), cmap="gray")
             plt.title("Encrypted image")
             plt.show()
             plt.close()
@@ -97,7 +99,3 @@ if __name__ == "__main__":
 
     ipfe_demo = IPFE(p_input)
     ipfe_demo.run(len(x_input), x_input, y_input)
-
-
-
-    

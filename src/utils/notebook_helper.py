@@ -1,14 +1,14 @@
-import torch
-from torch.utils.data import DataLoader
-import torchvision.transforms as transforms
-from torchvision.datasets import MNIST
 import numpy as np
+import torch
+import torchvision.transforms as transforms
+from torch.utils.data import DataLoader
+from torchvision.datasets import MNIST
+
 
 def encrypt_test_data(model, test_loader, device, num_samples=5):
     """Encrypt a batch of test data"""
     model.eval()
     with torch.no_grad():
-
         # Get a batch of test data
         data_iter = iter(test_loader)
         images, labels = next(data_iter)
@@ -23,6 +23,7 @@ def encrypt_test_data(model, test_loader, device, num_samples=5):
         print(f"Encrypted {num_samples} samples.")
 
     return encrypted_data, labels_subset
+
 
 def test_ipfe_cnn(model, encrypted_data, labels, H, W, device):
     """Test the IPFE-CNN with a sample query vector"""
@@ -42,9 +43,9 @@ def test_ipfe_cnn(model, encrypted_data, labels, H, W, device):
             total = labels.size(0)
             print(f"Accuracy on encrypted samples: {100 * correct / total:.2f}% ({correct}/{total})")
 
-
         except Exception as e:
             print(f"Encrypted IPFE forward pass failed: {e}")
+
 
 def test_regular_ipfe_cnn(model, test_loader, device, num_samples=5):
     """Test the IPFE-CNN with a sample query vector"""
@@ -70,17 +71,16 @@ def test_regular_ipfe_cnn(model, test_loader, device, num_samples=5):
             total = labels_subset.size(0)
             print(f"Accuracy on encrypted samples: {100 * correct / total:.2f}% ({correct}/{total})")
 
-
         except Exception as e:
             print(f"Encrypted IPFE forward pass failed: {e}")
 
 
 def load_data():
-    transform = transforms.Compose([
-        transforms.Lambda(lambda pic: torch.tensor(np.array(pic), dtype=torch.float32).unsqueeze(0))
-    ])
+    transform = transforms.Compose(
+        [transforms.Lambda(lambda pic: torch.tensor(np.array(pic), dtype=torch.float32).unsqueeze(0))]
+    )
     batch_size = 64
-    test_dataset = MNIST(root='./data', train=False, download=True, transform=transform)
+    test_dataset = MNIST(root="./data", train=False, download=True, transform=transform)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
     print(f"Test samples: {len(test_dataset)}")
     return test_loader

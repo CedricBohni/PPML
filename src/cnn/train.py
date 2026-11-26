@@ -1,6 +1,8 @@
 import torch
 from torch import nn
+
 from src.utils.timing import timed
+
 
 def train_one_epoch(model, loader, criterion, optimizer, device, print_every=200):
     model.train()
@@ -26,6 +28,7 @@ def train_one_epoch(model, loader, criterion, optimizer, device, print_every=200
     epoch_loss = running_loss / len(loader)
     epoch_acc = 100.0 * correct / max(1, total)
     return {"loss": epoch_loss, "acc": epoch_acc}
+
 
 def fit(model, loaders, cfg, device):
     crit = nn.CrossEntropyLoss()
