@@ -22,7 +22,7 @@ from src.utils.math_helper import bsgs_numba, find_generator, mod_inv_numba, mod
 Ciphertext = tuple[int, list[int]]
 
 
-@njit
+@njit(nogil=True)
 def decrypt_fast(ct0, cts, sk_y, y, p):
     """Return ``g^<x, y> mod p`` from a ciphertext ``(ct0, cts)`` and functional key ``sk_y``."""
     num = 1
@@ -32,7 +32,7 @@ def decrypt_fast(ct0, cts, sk_y, y, p):
     return (num * mod_inv_numba(denom, p)) % p
 
 
-@njit
+@njit(nogil=True)
 def decrypt_patches_batch(ct0_array, cts_array, sk_y, y_vec, g, p):
     """Decrypt many ciphertexts for the same functional key ``(sk_y, y_vec)``.
 

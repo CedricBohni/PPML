@@ -8,7 +8,7 @@ from math import isqrt
 from numba import njit
 
 
-@njit
+@njit(nogil=True)
 def mod_pow_numba(a, b, p):
     """Compute ``(a ** b) % p`` using binary exponentiation (Numba-friendly)."""
     result = 1
@@ -21,13 +21,13 @@ def mod_pow_numba(a, b, p):
     return result
 
 
-@njit
+@njit(nogil=True)
 def mod_inv_numba(a, p):
     """Modular inverse via Fermat's little theorem (``p`` must be prime)."""
     return mod_pow_numba(a, p - 2, p)
 
 
-@njit
+@njit(nogil=True)
 def bsgs_numba(g, h, p, max_range):
     """Solve ``g^x = h (mod p)`` for ``x`` in ``[0, max_range)`` with baby-step giant-step.
 

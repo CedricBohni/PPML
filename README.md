@@ -18,8 +18,9 @@ Built as the **2025 Integrated Masters Project** by *Cedric Bohni* and *Konstant
   key derivation, baby-step giant-step discrete logs and automatic prime selection for a given network.
 - **Encrypted inference keeps the plaintext accuracy.** Test accuracy is the same in 21 of 24 benchmarked
   CNN configurations. The only difference in the logits comes from quantizing the weights to 10⁻⁴.
-- **About 3.5× faster** encrypted evaluation than the pure-Python baseline (median over 27 configurations),
-  using Numba-compiled modular arithmetic and batched decryption.
+- **About 8.5× faster** encrypted evaluation than the pure-Python baseline. Numba-compiled batch decryption
+  gives about 3.5× (median over 27 configurations). Releasing the GIL so that kernel threads run in
+  parallel gives another 2.6–2.9× ([details](#releasing-the-gil)).
 - **Reproducible research pipeline:** 8 step-by-step notebooks, a config-driven benchmark suite with
   29 pretrained checkpoints, a TCP client–server demo, tests and CI.
 
@@ -60,7 +61,9 @@ derives this bound from the trained weights and returns the next prime above it.
   <img alt="Median speed-up over sequential IPFE decryption: kernel + patch threads 2.03×, kernel threads 2.64×, batched Numba 3.52×, batched Numba + kernel threads 3.46×" src="docs/speedup-light.png">
 </picture>
 
-Selected configurations, timed on 64 MNIST test images (seconds for the whole encrypted evaluation):
+The chart and the tables below come from the original benchmark in `results/`, recorded before the
+[GIL fix](#releasing-the-gil). Selected configurations, timed on 64 MNIST test images (seconds for the
+whole encrypted evaluation):
 
 | Model | Params | Plain acc. | IPFE acc. | Sequential (s) | Batched Numba (s) |
 |---|--:|--:|--:|--:|--:|
@@ -85,11 +88,39 @@ uv run python scripts/plot_results.py
 - Most of the speed-up comes from Numba. The baseline decrypts with the pure-Python implementation,
   while all four strategies use the JIT-compiled one. Batching every patch into a single compiled loop
   per kernel is fastest.
-- Threads add little or even cost time: kernel + patch threads are slower than kernel threads alone.
-  The Numba functions are compiled without `nogil=True`, so they hold Python's GIL and the threads
-  can't decrypt in parallel. Releasing the GIL is the obvious next optimization.
+- Threads added little or even cost time: kernel + patch threads were slower than kernel threads alone.
+  The Numba functions were compiled without `nogil=True`, so they held Python's GIL and the threads
+  couldn't decrypt in parallel. The next section fixes this.
 - Accuracy differs in three configurations. Two of them are off by one image out of 64. The model whose
   first layer has a single output channel drops to 68.8%.
+
+### Releasing the GIL
+
+The benchmark above showed that the thread-based strategies weren't really parallel. All of the
+Numba-compiled functions now use `@njit(nogil=True)`. They work on plain integers and arrays, so they
+can run without Python's Global Interpreter Lock, and the thread pools now decrypt different kernels
+on different cores at the same time.
+
+Each pair below was measured back to back on the same 16 MNIST test images, with the JIT warmed up and
+the same keys, on a laptop with 8 logical CPUs. Every strategy predicts exactly the same digits.
+
+| Strategy | 3×3, stride 3: before → after | 3×3, stride 1: before → after |
+|---|--:|--:|
+| Batched (Numba) + kernel threads | 3.12 s → **1.08 s** (2.9×) | 18.89 s → **7.28 s** (2.6×) |
+| Kernel threads | 3.55 s → 1.88 s (1.9×) | 23.05 s → 14.43 s (1.6×) |
+| Kernel + patch threads | 5.25 s → 3.57 s (1.5×) | 32.43 s → 22.76 s (1.4×) |
+| Batched (Numba), no threads | 3.02 s → 3.08 s (unchanged) | 19.52 s → 19.26 s (unchanged) |
+
+With the GIL released, batched decryption plus kernel threads went from being no better than batching
+alone to the fastest strategy, at about **8.5× the sequential baseline** (9.11 s → 1.08 s and
+62.5 s → 7.3 s). The gain is bounded by the number of first-layer kernels (8 here) and CPU cores. The
+strategy that doesn't use threads stays the same, which confirms the gain comes from parallelism.
+
+To reproduce the comparison on your machine:
+
+```bash
+uv run python scripts/benchmark_strategies.py --images 16
+```
 
 ## Quick start
 
