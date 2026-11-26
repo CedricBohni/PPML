@@ -32,6 +32,15 @@ dev = [
 # The project only needs CPU inference. On Linux, PyPI's torch wheels pull ~2 GB of CUDA
 # libraries, so take torch/torchvision from the CPU-only index there (e.g. in CI).
 # Windows and macOS wheels on PyPI are already CPU builds.
+[tool.uv]
+# Make the lock resolve to builds that exist on every supported platform. On the CPU index,
+# x86_64 Linux wheels are tagged `+cpu` while the untagged version only ships aarch64 wheels.
+required-environments = [
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "sys_platform == 'win32' and platform_machine == 'AMD64'",
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
+
 [[tool.uv.index]]
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
